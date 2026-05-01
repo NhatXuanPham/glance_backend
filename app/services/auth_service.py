@@ -1,5 +1,6 @@
 import httpx
 import uuid
+from datetime import datetime, timezone
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -8,11 +9,12 @@ from app.core.security import (
     create_token,
     hash_password,
     verify_password,
+    verify_refresh_token,
 )
 from app.db.models.users import User
 from app.repositories.user_repo import user_repo
 from app.repositories.token_repo import refresh_token_repo
-from app.schemas.auth_schema import AccessTokenResponse, RegisterRequest
+from app.schemas.auth_schema import TokenResponse, RegisterRequest, RefreshTokenRequest, AccessTokenResponse
 
 class AuthService:
 
@@ -30,7 +32,7 @@ class AuthService:
             password_hash=hash_password(data.password),
         )
 
-    def login(self, db: Session, form_data: OAuth2PasswordRequestForm) -> AccessTokenResponse:
+    def login(self, db: Session, form_data: OAuth2PasswordRequestForm) -> TokenResponse:
         user = user_repo.get_by_email(db, form_data.username)
         if not user or not verify_password(form_data.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
@@ -48,7 +50,18 @@ class AuthService:
     def logout_all(self, db: Session, user_id: uuid.UUID) -> None:
         refresh_token_repo.revoke_all_by_user(db, user_id)
 
-    def google_callback(self, db: Session, code: str) -> AccessTokenResponse:
+    def refresh_access_token(self, db: Session, refresh_token_data: RefreshTokenRequest) -> AccessTokenResponse:
+        
+        verify_refresh_token(refresh_token_data.refresh_token)
+
+        rt = refresh_token_repo.get_by_token(db, refresh_token_data.refresh_token)
+        if not rt or rt.revoked:
+            raise HTTPException(status_code=401, detail="Refresh token không hợp lệ")
+
+        access_token, expires_at = create_token(rt.user_id, "access")
+        return AccessTokenResponse(access_token=access_token, expires_at=expires_at)
+
+    def google_callback(self, db: Session, code: str) -> TokenResponse:
         google_access_token = self._exchange_code(code)
         user_info = self._get_google_user(google_access_token)
 
@@ -73,11 +86,11 @@ class AuthService:
             raise HTTPException(status_code=404, detail="User không tìm thấy")
         return user
 
-    def _issue_tokens(self, db: Session, user: User) -> AccessTokenResponse:
-        access_token, expires_at = create_token(user.id, "access")
-        refresh_token, expires_at = create_token(user.id, "refresh")
-        refresh_token_repo.create(db, user.id, refresh_token, expires_at)
-        return AccessTokenResponse(access_token=access_token, refresh_token=refresh_token)
+    def _issue_tokens(self, db: Session, user: User) -> TokenResponse:
+        access_token, access_expires_at = create_token(user.id, "access")
+        refresh_token, refresh_expires_at = create_token(user.id, "refresh")
+        refresh_token_repo.create(db, user.id, refresh_token, refresh_expires_at)
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token, access_token_expires_at=access_expires_at, refresh_token_expires_at=refresh_expires_at)
 
     def _exchange_code(self, code: str) -> str:
         response = httpx.post(

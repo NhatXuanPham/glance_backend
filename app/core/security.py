@@ -1,20 +1,16 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from jose import jwt
-from datetime import datetime, timedelta
+from jose import jwt, JWTError
 from fastapi import Depends, HTTPException
-from fastapi.security import HTTPBearer, OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer
 from app.core.config import settings
 from passlib.context import CryptContext
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login")
-
-security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def create_token(user_id: uuid.UUID, token_type: str) -> tuple[str, datetime]:
     now = datetime.now(timezone.utc)
-    
     if token_type == "access":
         expires_at = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     elif token_type == "refresh":
@@ -30,22 +26,22 @@ def create_token(user_id: uuid.UUID, token_type: str) -> tuple[str, datetime]:
         "exp": expires_at,
     }
 
-    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    return token, expires_at
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM), expires_at
 
-def decode_token(token: str = Depends(oauth2_scheme), token_type: str = "access") -> dict:
+def decode_token(token: str, token_type: str = "access") -> dict:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         if payload.get("type") != token_type:
             raise HTTPException(status_code=401, detail=f"Expected {token_type} token")
         return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
+    except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 def verify_access_token(token: str = Depends(oauth2_scheme)) -> dict:
     return decode_token(token, token_type="access")
+
+def verify_refresh_token(token: str = Depends(oauth2_scheme)) -> dict:
+    return decode_token(token, token_type="refresh")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)

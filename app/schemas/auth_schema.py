@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel, EmailStr
+from datetime import datetime
 from app.core.config import settings
 class RegisterRequest(BaseModel):
     display_name: str
@@ -9,9 +10,13 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: Optional[EmailStr] = None
     password: str
-class AccessTokenResponse(BaseModel):
+class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
-    expires_in: int = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    access_token_expires_at: datetime 
+    refresh_token_expires_at: datetime
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+class AccessTokenResponse(BaseModel):
+    access_token: str
+    expires_at: datetime
