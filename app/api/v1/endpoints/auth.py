@@ -8,8 +8,8 @@ from app.schemas.auth_schema import (
     RefreshTokenRequest,
     RegisterRequest,
     AccessTokenResponse,
+    GoogleExchangeRequest,
 )
-from app.core.security import verify_refresh_token
 from app.services.auth_service import auth_service
 from app.core.config import settings
 router = APIRouter()
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post("/register", status_code=201)
 def register_customer(data: RegisterRequest, db: Session = Depends(get_db)):
     user = auth_service.register(db, data)
-    return {"message": "Đăng ký thành công", "user_id": user.id}
+    return {"message": "Registration successful", "user_id": user.id}
 
 @router.post("/login", response_model=TokenResponse)
 def login_customer(
@@ -44,7 +44,7 @@ def google_login():
     )
     return RedirectResponse(google_auth_url)
 
-@router.get("/google/callback")
-def google_callback(code: str, db: Session = Depends(get_db)):
-    tokens = auth_service.google_callback(db, code)
-    return tokens
+@router.post("/google/exchange")
+def google_exchange( data: GoogleExchangeRequest, db: Session = Depends(get_db ),
+):
+    return auth_service.google_exchange(db, data.code)

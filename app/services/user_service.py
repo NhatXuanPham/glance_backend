@@ -8,7 +8,7 @@ class UserService:
     def get_me(self, db: Session, user_id: str) -> User:
         user = user_repo.get_by_id(db, uuid.UUID(user_id))
         if not user:
-            raise HTTPException(status_code=404, detail="User không tìm thấy")
+            raise HTTPException(status_code=404, detail="User not found")
         return user
 
 user_service = UserService()

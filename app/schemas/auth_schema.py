@@ -17,6 +17,8 @@ class TokenResponse(BaseModel):
     refresh_token_expires_at: datetime
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+class GoogleExchangeRequest(BaseModel):
+    code: str
 class AccessTokenResponse(BaseModel):
     access_token: str
     expires_at: datetime

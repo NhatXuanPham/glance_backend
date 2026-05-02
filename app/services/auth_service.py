@@ -20,9 +20,9 @@ class AuthService:
 
     def register(self, db: Session, data: RegisterRequest) -> User:
         if user_repo.get_by_email(db, data.email):
-            raise HTTPException(status_code=400, detail="Email đã được sử dụng")
+            raise HTTPException(status_code=400, detail="Email has already been registered")
         if user_repo.get_by_username(db, data.username):
-            raise HTTPException(status_code=400, detail="Username đã được sử dụng")
+            raise HTTPException(status_code=400, detail="Username has already been used")
 
         return user_repo.create(
             db,
@@ -35,16 +35,16 @@ class AuthService:
     def login(self, db: Session, form_data: OAuth2PasswordRequestForm) -> TokenResponse:
         user = user_repo.get_by_email(db, form_data.username)
         if not user or not verify_password(form_data.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
+            raise HTTPException(status_code=401, detail="Email or password is incorrect")
         if not user.active:
-            raise HTTPException(status_code=403, detail="Tài khoản đã bị vô hiệu hóa")
+            raise HTTPException(status_code=403, detail="Account has been disabled")
 
-        return self._issue_tokens(db, user)
+        return self.issue_tokens(db, user)
 
     def logout(self, db: Session, refresh_token: str) -> None:
         rt = refresh_token_repo.get_by_token(db, refresh_token)
         if not rt or rt.revoked:
-            raise HTTPException(status_code=400, detail="Refresh token không hợp lệ")
+            raise HTTPException(status_code=400, detail="Refresh token is invalid")
         refresh_token_repo.revoke(db, refresh_token)
 
     def logout_all(self, db: Session, user_id: uuid.UUID) -> None:
@@ -56,43 +56,12 @@ class AuthService:
 
         rt = refresh_token_repo.get_by_token(db, refresh_token_data.refresh_token)
         if not rt or rt.revoked:
-            raise HTTPException(status_code=401, detail="Refresh token không hợp lệ")
+            raise HTTPException(status_code=401, detail="Refresh token is invalid")
 
         access_token, expires_at = create_token(rt.user_id, "access")
         return AccessTokenResponse(access_token=access_token, expires_at=expires_at)
 
-    def google_callback(self, db: Session, code: str) -> TokenResponse:
-        google_access_token = self._exchange_code(code)
-        user_info = self._get_google_user(google_access_token)
-
-        email = user_info["email"]
-        user = user_repo.get_by_email(db, email)
-
-        if not user:
-            user = user_repo.create(
-                db,
-                display_name=user_info.get("name", email.split("@")[0]),
-                username=email.split("@")[0] + "_" + str(uuid.uuid4())[:6],
-                email=email,
-                password_hash=None,
-                avatar_url=user_info.get("picture"),
-            )
-
-        return self._issue_tokens(db, user)
-
-    def get_profile(self, db: Session, user_id: uuid.UUID) -> User:
-        user = user_repo.get_by_id(db, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User không tìm thấy")
-        return user
-
-    def _issue_tokens(self, db: Session, user: User) -> TokenResponse:
-        access_token, access_expires_at = create_token(user.id, "access")
-        refresh_token, refresh_expires_at = create_token(user.id, "refresh")
-        refresh_token_repo.create(db, user.id, refresh_token, refresh_expires_at)
-        return TokenResponse(access_token=access_token, refresh_token=refresh_token, access_token_expires_at=access_expires_at, refresh_token_expires_at=refresh_expires_at)
-
-    def _exchange_code(self, code: str) -> str:
+    def google_exchange(self, db: Session, code: str) -> TokenResponse:
         response = httpx.post(
             "https://oauth2.googleapis.com/token",
             data={
@@ -103,17 +72,34 @@ class AuthService:
                 "grant_type": "authorization_code",
             },
         )
-        data = response.json()
-        if "error" in data:
-            raise HTTPException(status_code=400, detail="Google OAuth thất bại")
-        return data["access_token"]
+        token_data = response.json()
+        if "error" in token_data:
+            raise HTTPException(status_code=400, detail="Google OAuth failed")
 
-    def _get_google_user(self, access_token: str) -> dict:
-        response = httpx.get(
+        user_info = httpx.get(
             "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        return response.json()
+            headers={"Authorization": f"Bearer {token_data['access_token']}"},
+        ).json()
+
+        email = user_info["email"]
+        user = user_repo.get_by_email(db, email)
+        if not user:
+            user = user_repo.create(
+                db,
+                display_name=user_info.get("name", email.split("@")[0]),
+                username=email.split("@")[0] + "_" + str(uuid.uuid4())[:6],
+                email=email,
+                password_hash=None,
+                avatar_url=user_info.get("picture"),
+            )
+
+        return self.issue_tokens(db, user)
+    
+    def issue_tokens(self, db: Session, user: User) -> TokenResponse:
+        access_token, access_expires_at = create_token(user.id, "access")
+        refresh_token, refresh_expires_at = create_token(user.id, "refresh")
+        refresh_token_repo.create(db, user.id, refresh_token, refresh_expires_at)
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token, access_token_expires_at=access_expires_at, refresh_token_expires_at=refresh_expires_at)
 
 
 auth_service = AuthService()
