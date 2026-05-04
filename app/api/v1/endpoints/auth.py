@@ -12,7 +12,8 @@ from app.schemas.auth_schema import (
 )
 from app.services.auth_service import auth_service
 from app.core.config import settings
-router = APIRouter()
+
+router = APIRouter(tags=["auth"])
 
 @router.post("/register", status_code=201)
 def register_customer(data: RegisterRequest, db: Session = Depends(get_db)):
