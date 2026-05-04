@@ -23,4 +23,53 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     dob = Column(Date, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    is_private = Column(Boolean, default=False, nullable=False)
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    followers = relationship(
+        "Follow",
+        foreign_keys="Follow.following_id",
+        back_populates="following",
+        cascade="all, delete-orphan"
+    )
+    following = relationship(
+        "Follow",
+        foreign_keys="Follow.follower_id",
+        back_populates="follower",
+        cascade="all, delete-orphan"
+    )
+    sent_requests = relationship(
+        "FollowRequest",
+        foreign_keys="FollowRequest.requester_id",
+        back_populates="requester",
+        cascade="all, delete-orphan"
+    )
+    received_requests = relationship(
+        "FollowRequest",
+        foreign_keys="FollowRequest.target_id",
+        back_populates="target",
+        cascade="all, delete-orphan"
+    )
+    blocked_users = relationship(
+        "Block",
+        foreign_keys="Block.blocker_id",
+        back_populates="blocker",
+        cascade="all, delete-orphan"
+    )
+    blocked_by = relationship(
+        "Block",
+        foreign_keys="Block.blocked_id",
+        back_populates="blocked",
+        cascade="all, delete-orphan"
+    )
+    restricted_users = relationship(
+        "Restrict",
+        foreign_keys="Restrict.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    restricted_by = relationship(
+        "Restrict",
+        foreign_keys="Restrict.target_id",
+        back_populates="target",
+        cascade="all, delete-orphan"
+    )
