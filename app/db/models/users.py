@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, Date, DateTime, String, Text, CheckConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, Integer, String, Text, CheckConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import UUID
@@ -25,6 +25,9 @@ class User(Base):
     active = Column(Boolean, default=True, nullable=False)
     is_private = Column(Boolean, default=False, nullable=False)
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    total_followers = Column(Integer, default=0, nullable=False)
+    total_following = Column(Integer, default=0, nullable=False)
+    total_posts = Column(Integer, default=0, nullable=False)
     followers = relationship(
         "Follow",
         foreign_keys="Follow.following_id",
